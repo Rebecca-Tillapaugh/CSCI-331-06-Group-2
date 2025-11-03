@@ -1,5 +1,6 @@
 import os
 from sudoku_board import SudokuBoard
+from CSP_solver import backtrack_solve
 
 """
 Currently just to test out Sudoku Board class. Might be used to run everything, and have the test functions in here
@@ -19,6 +20,8 @@ def main():
         print("First empty cell found at:", empty)
     else:
         print("Board is full!")
+    
+    backtrack_solve(board)
 
 if __name__ == "__main__":
     main()
