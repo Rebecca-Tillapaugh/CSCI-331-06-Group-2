@@ -1,7 +1,11 @@
 import os
 from collections import deque
-
 from sudoku_board import SudokuBoard
+import time
+
+# Performance counters for plain backtracking
+backtrack_calls = 0
+backtrack_count = 0
 
 ONE_TO_NINE = {1, 2, 3, 4, 5, 6, 7, 8 ,9}
 
@@ -116,10 +120,8 @@ def solve(board : SudokuBoard):
 # Performs backtracking to solve Soduku Board
 def backtrack(board: SudokuBoard, CSPDict: dict[tuple[int, int], 'CSPNode']) -> bool:
 
-    # board is our soduko board we are trying to solve from the soduko_board file
-
-    # CSPDict is a dictionary with key being the location of the cell and the value being the
-    # CSPNode corresponding to the cell (with id, value, etc.)
+    global backtrack_calls, backtrack_count
+    backtrack_calls += 1
 
     # Find next empty cell
     empty = []
@@ -155,6 +157,7 @@ def backtrack(board: SudokuBoard, CSPDict: dict[tuple[int, int], 'CSPNode']) -> 
                 return True
 
             # Backtrack - undo domain changes
+            backtrack_count += 1
             node.assignedValue = None
             board.grid[row][col] = 0
             for neighbor, old_domain in old_domains.items():
@@ -165,11 +168,24 @@ def backtrack(board: SudokuBoard, CSPDict: dict[tuple[int, int], 'CSPNode']) -> 
 
 
 def backtrack_solve(board: SudokuBoard):
+    
+    global backtrack_calls, backtrack_count
+    backtrack_calls = 0
+    backtrack_count = 0
+    start_time = time.time()
 
     # Convert to CSP and keep consistent
     CSPDict = convert(board)
     enforceConsistency(CSPDict)
     solved = backtrack(board, CSPDict)
+
+    end_time = time.time()
+    total_time = end_time - start_time
+
+    print("\n--- Backtracking Performance ---")
+    print(f"Runtime: {total_time:.4f} seconds")
+    print(f"Backtrack calls: {backtrack_calls}")
+    print(f"Backtracks made: {backtrack_count}")
 
     if solved:
         print("\nSudoku solved using Backtracking.")
@@ -186,4 +202,5 @@ if __name__ == "__main__":
 
     board = SudokuBoard(file_path)
 
-    solve(board)
+    backtrack_solve(board)
+    #solve(board)
