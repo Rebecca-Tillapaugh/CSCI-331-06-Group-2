@@ -139,7 +139,7 @@ def backtrack(board: SudokuBoard, CSPDict: dict[tuple[int, int], 'CSPNode']) -> 
 
     for value in sorted(node.possibleValues):
         # Check if assignment is valid
-        if all(value not in neighbor.possibleValues or neighbor.assignedValue is None for neighbor in node.neighbors):
+        if all(neighbor.assignedValue != value for neighbor in node.neighbors):
             
             node.assignValue(value)
             board.grid[row][col] = value
@@ -202,5 +202,6 @@ if __name__ == "__main__":
 
     board = SudokuBoard(file_path)
 
+    solve(board)
+
     backtrack_solve(board)
-    #solve(board)
