@@ -77,7 +77,7 @@ class SudokuBoard:
         start_col = (col // self.box_size) * self.box_size
         for i in range(start_row, start_row + self.box_size):
             for j in range(start_col, start_col + self.box_size):
-                if self.grid[i][j] == num:
+                if (row, col) != (i, j) and self.grid[i][j] == num:
                     return False
 
         # Placeholder for custom rule
