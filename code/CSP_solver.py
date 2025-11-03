@@ -1,4 +1,5 @@
 import os
+from collections import deque
 
 from sudoku_board import SudokuBoard
 
@@ -18,6 +19,11 @@ class CSPNode:
         self.possibleValues = domain
         self.neighbors = set()
 
+    def hasFinalValue(self):
+        return len(self.possibleValues) == 1
+
+    def isDeadEnd(self):
+        return len(self.possibleValues) == 0
 
     def addNeighbors(self, *neighborsToAdd):
         self.neighbors.update(neighborsToAdd)
@@ -34,14 +40,6 @@ class CSPNode:
         restrictionMade = len(self.possibleValues) < prevLen
 
         return restrictionMade
-
-
-    def forwardCheck(self) -> set:
-        affectedNeighbors = set()
-        for neighbor in self.neighbors:
-            if neighbor.restrict(self.assignedValue):
-                affectedNeighbors.add(neighbor)
-        return affectedNeighbors
 
     def __repr__(self):
         return str(self.possibleValues)
@@ -61,7 +59,7 @@ def convert(board : SudokuBoard) -> CSPBoard:
             if value != 0:
                 node = CSPNode(nodeId,{value}, assignedValue=value)
             else:
-                node = CSPNode(nodeId, ONE_TO_NINE)
+                node = CSPNode(nodeId, ONE_TO_NINE.copy())
             CSPDict[i, j] = node
             nodeId += 1
 
@@ -78,9 +76,41 @@ def convert(board : SudokuBoard) -> CSPBoard:
 
     return CSPDict
 
+def enforceConsistency(board : CSPBoard) -> bool:
+    stillToCheck = deque(board.values())
+    inQueue = set(board.values())
+    while len(stillToCheck) > 0:
+        current = stillToCheck.popleft()
+        inQueue.remove(current)
+
+        revised = False
+        for neighbor in current.neighbors:
+            # Add bad vals to this set for removal later so the set doesn't change while under iteration
+            invalidVals = set()
+            for value in current.possibleValues:
+                if value in neighbor.possibleValues and neighbor.hasFinalValue():
+                    # Assigning value to current would leave neighbor with no possible values
+                    invalidVals.add(value)
+                    revised = True
+            current.restrict(*invalidVals)
+
+        if revised:
+            if current.isDeadEnd():
+                return False
+            # Re-check all neighbors not already in the queue against this revised domain
+            stillToCheck.extend([n for n in current.neighbors if n not in inQueue])
+            inQueue.update(current.neighbors)
+    return True
+
+
 def solve(board : SudokuBoard):
     CSPDict = convert(board)
-    print(CSPDict)
+    consistent = enforceConsistency(CSPDict)
+    if consistent:
+        for (row, col), node in CSPDict.items():
+            if node.hasFinalValue():
+                board.grid[row][col] = [*node.possibleValues][0]
+        board.print_board()
 
 
 if __name__ == "__main__":
