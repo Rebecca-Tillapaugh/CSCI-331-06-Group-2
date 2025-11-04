@@ -1,22 +1,26 @@
-# Project-3   New York City Route Planner
+# Project 4 - Customized Sudoku Solver Project
 
-# This program is a New York City Route Planner where ~20-30 major cities in New York State
-# are represented as nodes in a graph. The edges between cities will be weighted by actual
-# road distances (miles). The heuristic cost for informed search will be the straight-line distance
-# between city coordinates. The start node is Rochester (RIT), and the user will choose the destination 
-# city. DFS, BFS, IDS, UCS, Greedy Best-First Search, A*, and IDA* search are implemented to find paths
-# from Rochester to the chosen destination. For each algorithm, the path cost, number
-# of expanded nodes, and runtime are compared, and the algorithm(s) that return optimal solutions are
-# identified. A graph drawing with nodes and weighted edges will be developed.
+## Abstract
+This project implements a solver for a **Customized Sudoku Puzzle** using **constraint satisfaction techniques (CSP)**. The solver includes two algorithms:  
+1. **Plain Backtracking** – a traditional recursive solver without constraint propagation.  
+2. **CSP Enhanced Backtracking** – backtracking with techniques like forward checking, arc consistency, and domain pruning to improve efficiency.  
 
-# Contributors:
-#   Rebecca Tillapaugh
-#   Lucas Peterson
-#   Marvynn Talusan
+The project allows experimenting with customized Sudoku variants and comparing the performance of both algorithms on these puzzles.  
 
-# How to run: 
+## Developers
+| Name | Contribution |
+|------|-------------|
+| Marvynn Talusan    | Implemented Sudoku board class, basic utilities, and file handling |
+| Lucas Peterson     | Implemented CSP Enhanced Backtracking solver (CSPNode structure, enforceConsistency) |
+| Rebecca Tillapaugh | Implemented Backtracking solver and testing framework, performance analysis |
 
-# Directories:
-#   code/: All scripts, notebooks, and implementations.
-#   resources/: Research papers, reference links, notes used for the project, and final presentation slides.
-#   data/: Datasets, pre-trained models, etc.
+## How to Run the Project
+
+### Prerequisites
+- Python 3.10+
+
+### Steps to Run
+1. Clone the repository:
+```bash
+git clone https://github.com/Rebecca-Tillapaugh/CSCI-331-06-Group-2.git
+cd <repository_folder>
