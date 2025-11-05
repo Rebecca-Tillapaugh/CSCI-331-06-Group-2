@@ -1,5 +1,9 @@
 import os
+import time
+
 from collections import deque
+from heapq import heapify, heappop
+from math import sqrt
 
 from sudoku_board import SudokuBoard
 
@@ -16,7 +20,7 @@ class CSPNode:
         self.id = id
         self.assignedValue = assignedValue
         self.domain = domain
-        self.possibleValues = domain
+        self.possibleValues = domain.copy()
         self.neighbors = set()
 
     def hasFinalValue(self):
@@ -27,6 +31,7 @@ class CSPNode:
 
     def addNeighbors(self, *neighborsToAdd):
         self.neighbors.update(neighborsToAdd)
+        self.neighbors.difference_update([self])
 
     def assignValue(self, value : int):
         if value in self.possibleValues:
@@ -41,82 +46,163 @@ class CSPNode:
 
         return restrictionMade
 
+    def copy(self):
+        return CSPNode(self.id, self.domain, self.assignedValue)
+
     def __repr__(self):
         return str(self.possibleValues)
 
     def __hash__(self):
         return self.id
 
-# Type alias for the standard data format for CSP Nodes representing a SudokuBoard
-# Dict where the key is a (row, col) tuple of the cell and the value is the CSP Node of the cell
-CSPBoard = dict[tuple[int, int], CSPNode]
+    def __lt__(self, other):
+        return len(self.possibleValues) - len(other.possibleValues)
 
-def convert(board : SudokuBoard) -> CSPBoard:
-    CSPDict = {}
+class CSPBoard:
+    grid : list[list[CSPNode|None]]
+    size : int
+    boxSize : int
+
+    def __init__(self, size:int, boxSize:int):
+        self.grid = [[None for _ in range(size)] for _ in range(size)]
+        self.size = size
+        self.boxSize = boxSize
+
+    def getAllNodes(self):
+        allNodes = []
+        for row in self.grid:
+            allNodes.extend(row)
+        return allNodes
+
+    def assignNeighbors(self):
+        for rowI, row in enumerate(self.grid):
+            for colI, node in enumerate(row):
+                # Same row
+                node.addNeighbors(*row)
+                # Same col
+                node.addNeighbors(*[self.grid[row][colI] for row in range(len(self.grid))])
+
+                # Same box
+                start_row = (rowI // self.boxSize) * self.boxSize
+                start_col = (colI // self.boxSize) * self.boxSize
+                for i in range(start_row, start_row + self.boxSize):
+                    for j in range(start_col, start_col + self.boxSize):
+                        node.addNeighbors(self.grid[i][j])
+
+    def copy(self):
+        copy = CSPBoard(self.size, self.boxSize)
+        for i, row in enumerate(self.grid):
+            for j, node in enumerate(row):
+                copy.grid[i][j] = node.copy()
+        return copy
+
+    def makeMove(self, cellToChange : CSPNode, val : int):
+        copyBoard = self.copy()
+
+        for node in copyBoard.getAllNodes():
+            if node.id == cellToChange.id:
+                node.assignValue(val)
+
+        return copyBoard
+
+    def enforceConsistency(self) -> bool:
+        stillToCheck = deque()
+
+        for row in self.grid:
+            for node in row:
+                stillToCheck.append(node)
+
+        inQueue = set(stillToCheck)
+
+        while len(stillToCheck) > 0:
+            current = stillToCheck.popleft()
+            inQueue.remove(current)
+
+            revised = False
+            for neighbor in current.neighbors:
+                # Add bad vals to this set for removal later so the set doesn't change while under iteration
+                invalidVals = set()
+                for value in current.possibleValues:
+                    if value in neighbor.possibleValues and neighbor.hasFinalValue():
+                        # Assigning value to current would leave neighbor with no possible values
+                        invalidVals.add(value)
+                        revised = True
+                current.restrict(*invalidVals)
+
+            if revised:
+                if current.isDeadEnd():
+                    return False
+                # Re-check all neighbors not already in the queue against this revised domain
+                stillToCheck.extend([n for n in current.neighbors if n not in inQueue])
+                inQueue.update(current.neighbors)
+        return True
+
+
+def convert(baseBoard : SudokuBoard) -> CSPBoard:
+    board = CSPBoard(baseBoard.size, baseBoard.box_size)
     nodeId = 0
-    for i, row in enumerate(board.grid):
+    for i, row in enumerate(baseBoard.grid):
         for j, value in enumerate(row):
             if value != 0:
                 node = CSPNode(nodeId,{value}, assignedValue=value)
             else:
                 node = CSPNode(nodeId, ONE_TO_NINE.copy())
-            CSPDict[i, j] = node
+            board.grid[i][j] = node
             nodeId += 1
 
-    for (thisRow, thisCol), node in CSPDict.items():
-        node.addNeighbors(*[CSPDict[thisRow, col] for col in set(range(board.size)).difference({thisCol})])
-        node.addNeighbors(*[CSPDict[row, thisCol] for row in set(range(board.size)).difference({thisRow})])
+    board.assignNeighbors()
 
-        start_row = (thisRow // board.box_size) * board.box_size
-        start_col = (thisCol // board.box_size) * board.box_size
-        for i in range(start_row, start_row + board.box_size):
-            for j in range(start_col, start_col + board.box_size):
-                if (i, j) != (thisRow, thisCol):
-                    node.addNeighbors(CSPDict[i, j])
+    return board
 
-    return CSPDict
+def solve(baseBoard : SudokuBoard):
+    board = convert(baseBoard)
 
-def enforceConsistency(board : CSPBoard) -> bool:
-    stillToCheck = deque(board.values())
-    inQueue = set(board.values())
-    while len(stillToCheck) > 0:
-        current = stillToCheck.popleft()
-        inQueue.remove(current)
+    # Basic approach which only does forward checking on initial state. Solves iff every resulting node has only one
+    # possibility afterward (currently working. Solves puzzle_standard_1)
 
-        revised = False
-        for neighbor in current.neighbors:
-            # Add bad vals to this set for removal later so the set doesn't change while under iteration
-            invalidVals = set()
-            for value in current.possibleValues:
-                if value in neighbor.possibleValues and neighbor.hasFinalValue():
-                    # Assigning value to current would leave neighbor with no possible values
-                    invalidVals.add(value)
-                    revised = True
-            current.restrict(*invalidVals)
-
-        if revised:
-            if current.isDeadEnd():
-                return False
-            # Re-check all neighbors not already in the queue against this revised domain
-            stillToCheck.extend([n for n in current.neighbors if n not in inQueue])
-            inQueue.update(current.neighbors)
-    return True
+    # board.enforceConsistency()
+    #
+    # for rowI, row in enumerate(board.grid):
+    #     for colI, node in enumerate(row):
+    #         if node.hasFinalValue():
+    #             baseBoard.grid[rowI][colI] = list(node.possibleValues)[0]
+    #
+    # baseBoard.print_board()
 
 
-def solve(board : SudokuBoard):
-    CSPDict = convert(board)
-    consistent = enforceConsistency(CSPDict)
-    if consistent:
-        for (row, col), node in CSPDict.items():
-            if node.hasFinalValue():
-                board.grid[row][col] = [*node.possibleValues][0]
-        board.print_board()
+    # Full CSP solver w/ backtracking, MRV and LCV
+
+    # Heap which orders nodes based on their remaining possible values
+    MRVHeap = board.getAllNodes()
+    heapify(MRVHeap)
+
+    progressMade = True
+    while progressMade:
+        progressMade = False
+        # Take the node with the fewest remaining possible values (MRV)
+        current = heappop(MRVHeap)
+
+        # Make the move which will result in the fewest restrictions on neighbors (LCV)
+        LCV = None
+        minConstraints = float('inf')  # Infinity
+        for val in current.possibleValues:
+            # TODO Calculate the number of restrictions made on neighbors for each value
+            pass
+
+        copyBoard = board.makeMove(current, LCV)
+
+        consistent = copyBoard.enforceConsistency()
+        if consistent:
+           pass
 
 
 if __name__ == "__main__":
     directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     file_path = os.path.join(directory, "data", "puzzle_standard_1.txt")
 
-    board = SudokuBoard(file_path)
+    start = time.perf_counter()
+    BaseBoard = SudokuBoard(file_path)
+    end = time.perf_counter()
+    print(f"{end - start} seconds")
 
-    solve(board)
+    solve(BaseBoard)
