@@ -21,8 +21,10 @@ def main():
         print("First empty cell found at:", empty)
     else:
         print("Board is full!")
-    
-    backtrack_solve(board)
 
+    print("Solving board with backtracking...")
+    backtrack_solve(board)
+    
+    
 if __name__ == "__main__":
     main()
