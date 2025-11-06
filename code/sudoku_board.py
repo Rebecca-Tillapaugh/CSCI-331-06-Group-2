@@ -80,10 +80,20 @@ class SudokuBoard:
                 if (row, col) != (i, j) and self.grid[i][j] == num:
                     return False
 
-        # Placeholder for custom rule
+        # Custom rule: diagonal constraint (numbers on both main diagonals must be unique)
+        # This is subject to change
         if self.custom:
-            # Implement additional validation logic here
-            pass
+            # Check main diagonal (top left to bottom right)
+            if row == col:
+                for i in range(self.size):
+                    if self.grid[i][i] == num:
+                        return False
+
+            # Check other diagonal (top right to bottom left)
+            if row + col == self.size - 1:
+                for i in range(self.size):
+                    if self.grid[i][self.size - 1 - i] == num:
+                        return False
 
         return True
 

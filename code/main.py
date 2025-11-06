@@ -1,5 +1,7 @@
 import os
 from sudoku_board import SudokuBoard
+from Backtrack_Solver import backtrack_solve
+
 
 """
 Currently just to test out Sudoku Board class. Might be used to run everything, and have the test functions in here
@@ -20,5 +22,9 @@ def main():
     else:
         print("Board is full!")
 
+    print("Solving board with backtracking...")
+    backtrack_solve(board)
+    
+    
 if __name__ == "__main__":
     main()
