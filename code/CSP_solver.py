@@ -11,21 +11,21 @@ class CSPNode:
     """
     Represents one cell on the sudoku board, and supports common CSP operations w/ error checking
     """
-    id : int
+    nodeId : int
     assignedValue : int | None
     domain : set[int]
     possibleValues : set[int]
     neighbors : set
 
-    def __init__(self, id : int, domain : set[int], assignedValue : int =None):
+    def __init__(self, nodeId : int, domain : set[int], assignedValue : int =None):
         """
         Create a new CSP node. Initializes with no neighbors, which means assign it values has no effect on other nodes.
-        :param id: The id of this node. Used to equate cells in the same position on different copies of the same board
+        :param nodeId: The nodeId of this node. Used to equate cells in the same position on different copies of the same board
         :param domain: The complete range of available numbers for this cell to take on. Expected to be a range from
             one to nine unless this cell is given a certain value by the puzzle
         :param assignedValue: The value currently assigned to this cell
         """
-        self.id = id
+        self.nodeId = nodeId
         self.assignedValue = assignedValue
         self.domain = domain
         self.possibleValues = domain.copy()
@@ -83,11 +83,11 @@ class CSPNode:
 
     def copy(self):
         """
-        Return a copy of this node, with the same id, domain, and assignedValue(if any).
+        Return a copy of this node, with the same nodeId, domain, and assignedValue(if any).
         Does not copy neighbors or restrictions on the domain.
         :return: A Deep copy of this node as described above
         """
-        return CSPNode(self.id, self.possibleValues, self.assignedValue)
+        return CSPNode(self.nodeId, self.possibleValues, self.assignedValue)
 
     def getConstraintsFrom(self, val):
         """
@@ -102,10 +102,10 @@ class CSPNode:
         return count
 
     def __repr__(self):
-        return str(self.possibleValues)
+        return str(self.nodeId)
 
     def __hash__(self):
-        return self.id
+        return self.nodeId
 
     def __lt__(self, other):
         return len(self.possibleValues) - len(other.possibleValues)
@@ -114,11 +114,13 @@ class CSPBoard:
     grid : list[list[CSPNode|None]]
     size : int
     boxSize : int
+    custom : bool
 
-    def __init__(self, size:int, boxSize:int):
+    def __init__(self, size:int, boxSize:int, custom:bool):
         self.grid = [[None for _ in range(size)] for _ in range(size)]
         self.size = size
         self.boxSize = boxSize
+        self.custom = custom
 
     def getAllNodes(self):
         """
@@ -151,7 +153,7 @@ class CSPBoard:
                 # Same row
                 node.addNeighbors(*row)
                 # Same col
-                node.addNeighbors(*[self.grid[row][colI] for row in range(len(self.grid))])
+                node.addNeighbors(*[self.grid[row][colI] for row in range(self.size)])
 
                 # Same box
                 start_row = (rowI // self.boxSize) * self.boxSize
@@ -159,13 +161,18 @@ class CSPBoard:
                 for i in range(start_row, start_row + self.boxSize):
                     for j in range(start_col, start_col + self.boxSize):
                         node.addNeighbors(self.grid[i][j])
+                if self.custom:
+                    if rowI == colI:
+                        node.addNeighbors(*[self.grid[i][i] for i in range(self.size)])
+                    if rowI + colI == self.size - 1:
+                        node.addNeighbors(*[self.grid[i][self.size - 1 - i] for i in range(self.size)])
 
     def copy(self):
         """
         Create a copy of this board, keeping neighbors but not restrictions on possible values (currently(11/7))
         :return: The created copy
         """
-        copy = CSPBoard(self.size, self.boxSize)
+        copy = CSPBoard(self.size, self.boxSize, self.custom)
         for i, row in enumerate(self.grid):
             for j, node in enumerate(row):
                 copy.grid[i][j] = node.copy()
@@ -182,7 +189,7 @@ class CSPBoard:
         copyBoard = self.copy()
 
         for node in copyBoard.getAllNodes():
-            if node.id == cellToChange.id:
+            if node.nodeId == cellToChange.nodeId:
                 node.assignValue(val)
 
         return copyBoard
@@ -196,9 +203,7 @@ class CSPBoard:
         """
         stillToCheck = deque()
 
-        for row in self.grid:
-            for node in row:
-                stillToCheck.append(node)
+        stillToCheck.extend([node for node in self.getAllNodes() if node.assignedValue is None])
 
         inQueue = set(stillToCheck)
 
@@ -211,7 +216,7 @@ class CSPBoard:
                 # Add bad vals to this set for removal later so the set doesn't change while under iteration
                 invalidVals = set()
                 for value in current.possibleValues:
-                    if value in neighbor.possibleValues and neighbor.hasFinalValue() or value == neighbor.assignedValue:
+                    if (value in neighbor.possibleValues and neighbor.hasFinalValue()) or value == neighbor.assignedValue:
                         # Assigning value to current would leave neighbor with no possible values
                         invalidVals.add(value)
                         revised = True
@@ -223,8 +228,9 @@ class CSPBoard:
                 if current.hasFinalValue():
                     current.assignValue(list(current.possibleValues)[0])
                 # Re-check all neighbors not already in the queue against this revised domain
-                stillToCheck.extend([n for n in current.neighbors if n not in inQueue])
-                inQueue.update(current.neighbors)
+                recheck = set([n for n in current.neighbors if n not in inQueue and n.assignedValue is None])
+                stillToCheck.extend(recheck)
+                inQueue.update(recheck)
         return True
 
     def __repr__(self):
@@ -243,7 +249,7 @@ def convertToCSP(baseBoard : SudokuBoard) -> CSPBoard:
     :param baseBoard: The SudokuBoard board object to convert
     :return: The converted board
     """
-    board = CSPBoard(baseBoard.size, baseBoard.box_size)
+    board = CSPBoard(baseBoard.size, baseBoard.box_size, baseBoard.custom)
     nodeId = 0
     for i, row in enumerate(baseBoard.grid):
         for j, value in enumerate(row):
@@ -268,45 +274,49 @@ def solve(baseBoard : SudokuBoard):
     """
     configsGenerated = configsProcessed = 1
     board = convertToCSP(baseBoard)
+    solvable = board.enforceConsistency()
 
     configStack = [board]
+    solved = False
 
-    while len(configStack) > 0:
-        currentConfig = configStack.pop()
-        configsProcessed += 1
-        # print(currentConfig)
+    if solvable:
+        while len(configStack) > 0 and not solved:
+            currentConfig = configStack.pop()
+            configsProcessed += 1
+            # print(currentConfig)
 
-        # Get the MRV - Nodes are compared based on size of their possible values list
-        currentNode = min([node for node in currentConfig.getAllNodes() if node.assignedValue is None])
+            # Get the MRV - Nodes are compared based on size of their possible values list
+            currentNode = min([node for node in currentConfig.getAllNodes() if node.assignedValue is None])
 
-        # Sort possible values of the MRV to find the LCV
-        orderedMoveList = list(currentNode.possibleValues)
-        orderedMoveList.sort(key=lambda x:currentNode.getConstraintsFrom(x), reverse=True)
+            # Sort possible values of the MRV to find the LCV
+            orderedMoveList = list(currentNode.possibleValues)
+            orderedMoveList.sort(key=lambda x:currentNode.getConstraintsFrom(x))
 
-        for val in orderedMoveList:
-            newConfig = currentConfig.makeMove(currentNode, val)
-            configsGenerated += 1
-            if newConfig.enforceConsistency():
-                if newConfig.isSolved():
-                    print("Solved!")
-                    print(f"Conifgs made: {configsGenerated}")
-                    print(f"Configs processed: {configsProcessed}")
-                    print(newConfig)
-                    return
-                configStack.append(newConfig)
+            for val in orderedMoveList:
+                newConfig = currentConfig.makeMove(currentNode, val)
+                configsGenerated += 1
+                valid = newConfig.enforceConsistency()
+                if valid:
+                    if newConfig.isSolved():
+                        solved = True
+                        break
+                    configStack.append(newConfig)
 
-    print("No Solution")
-    return
-
+    print(f"Solved\n{newConfig}" if solved else "No Solution")
+    print(f"Configs Made:{configsGenerated}")
+    print(f"Configs Processed:{configsProcessed}")
 
 if __name__ == "__main__":
     directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # custom = False
     # file_path = os.path.join(directory, "data", "puzzle_standard_1.txt")
-    file_path = os.path.join(directory, "data", "puzzle_hard.txt")
+    # file_path = os.path.join(directory, "data", "puzzle_hard.txt")
+    file_path = os.path.join(directory, "data", "puzzle_custom_2.txt")
+    custom = True
 
     start = time.perf_counter()
 
-    BaseBoard = SudokuBoard(file_path)
+    BaseBoard = SudokuBoard(file_path, custom)
     solve(BaseBoard)
 
     end = time.perf_counter()
