@@ -30,7 +30,6 @@ def backtrack(board: SudokuBoard) -> bool:
 
 
 def backtrack_solve(board: SudokuBoard):
-    
     global backtrack_calls, backtrack_count
     backtrack_calls = 0
     backtrack_count = 0
@@ -51,8 +50,17 @@ def backtrack_solve(board: SudokuBoard):
         board.print_board()
     else:
         print("\nNo solution found using Backtracking.")
-    
-    return solved
+
+    # Return metrics dictionary with same keys as CSP
+    return {
+        "solved": solved,
+        "runtime": total_time,
+        "backtrack_calls": backtrack_calls,
+        "backtracks": backtrack_count,
+        "consistency_time": 0,   # dummy since backtracking has no forward checking (needed for the script to work)
+        "copying_time": 0,       # dummy since backtracking has no state copying (needed for the script to work)
+        "finalBoard": board
+    }
 
 if __name__ == "__main__":
     directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

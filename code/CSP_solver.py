@@ -150,7 +150,8 @@ class CSPBoard:
                 # Same diagonal for custom puzzles
                 if self.custom:
                     if rowI == colI:
-                        toAdd.update([i ** 2 for i in range(self.size)])
+                        # FIXED: main diagonal indices (i * size + i), not i ** 2
+                        toAdd.update([i * self.size + i for i in range(self.size)])
                     if rowI + colI == self.size - 1:
                         toAdd.update([(i * self.size) + self.size - 1 - i for i in range(self.size)])
 
@@ -162,7 +163,8 @@ class CSPBoard:
         Create a copy of this board, keeping neighbors and restrictions on possible values
         :return: The created copy
         """
-        copy = CSPBoard(self.size, self.boxSize, self.custom, self.neighborsOf)
+        # FIXED: copy neighborsOf so copies don't share the same dict reference
+        copy = CSPBoard(self.size, self.boxSize, self.custom, self.neighborsOf.copy())
         for i, row in enumerate(self.grid):
             for j, node in enumerate(row):
                 copy.grid[i][j] = node.copy()
@@ -272,17 +274,18 @@ def solve(baseBoard: SudokuBoard):
     """
     Solve the given SudokuBoard, if possible
     Prints a possible solution if one exists, or "No Solution" if the given board is unsolvable
+    Returns a dictionary of performance metrics for experiments.
     :param baseBoard: The board to solve
-    :return: None
+    :return: dict of metrics
     """
 
     consistency = copying = 0
-
     configsGenerated = configsProcessed = 0
     board = convertToCSP(baseBoard)
 
     configStack = [board]
     solved = False
+    finalBoard = None
 
     while len(configStack) > 0 and not solved:
         currentConfig = configStack.pop()
@@ -294,12 +297,17 @@ def solve(baseBoard: SudokuBoard):
 
         if consistent:
             solved = currentConfig.isSolved()
-            if not solved:
+            if solved:
+                finalBoard = currentConfig
+                break
+            else:
                 # Get the most restricted assignable vertex (MRV)
                 currentNode = min(currentConfig.getUnassignedNodes())
                 # LCV ordering
-                orderedMoves = sorted(currentNode.possibleValues,
-                                      key=lambda x: currentConfig.getConstraintsFrom(currentNode.cellNum, x))
+                orderedMoves = sorted(
+                    currentNode.possibleValues,
+                    key=lambda x: currentConfig.getConstraintsFrom(currentNode.cellNum, x)
+                )
 
                 start = time.perf_counter()
                 for val in orderedMoves:
@@ -307,10 +315,24 @@ def solve(baseBoard: SudokuBoard):
                     configsGenerated += 1
                 copying += time.perf_counter() - start
 
-    print(f"Solved\n{currentConfig}" if solved else "No Solution")
-    print(f"Configs Made:{configsGenerated}")
-    print(f"Configs Processed:{configsProcessed}")
+    # Print solution for verification
+    print(f"Solved\n{finalBoard}" if solved else "No Solution")
+    print(f"Configs Made: {configsGenerated}")
+    print(f"Configs Processed: {configsProcessed}")
     print(consistency, copying, sep="\n")
+
+    total_runtime = consistency + copying  #Approximates
+
+    # Return metrics for experiment collection
+    return {
+        "solved": solved,
+        "runtime": total_runtime,
+        "configsProcessed": configsProcessed,
+        "configsGenerated": configsGenerated,
+        "consistency": consistency,
+        "copying": copying,
+        "finalBoard": finalBoard
+    }
 
 
 if __name__ == "__main__":

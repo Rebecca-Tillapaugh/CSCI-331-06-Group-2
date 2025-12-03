@@ -86,13 +86,13 @@ class SudokuBoard:
             # Check main diagonal (top left to bottom right)
             if row == col:
                 for i in range(self.size):
-                    if self.grid[i][i] == num:
+                    if i != row and self.grid[i][i] == num:
                         return False
 
             # Check other diagonal (top right to bottom left)
             if row + col == self.size - 1:
                 for i in range(self.size):
-                    if self.grid[i][self.size - 1 - i] == num:
+                    if i != row and self.grid[i][self.size - 1 - i] == num:
                         return False
 
         return True
