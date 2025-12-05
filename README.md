@@ -24,3 +24,27 @@ The project allows experimenting with customized Sudoku variants and comparing t
 ```bash
 git clone https://github.com/Rebecca-Tillapaugh/CSCI-331-06-Group-2.git
 cd <repository_folder>
+```
+2. Create a virtual environment (optional but recommended):
+```bash
+python -m venv venv
+```
+
+3. Activate the virtual environment:
+```bash
+# Windows
+venv\Scripts\activate
+
+# Mac/Linux
+source venv/bin/activate
+```
+
+4. Install the required dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+5. Run the project:
+```bash
+python main.py
+```

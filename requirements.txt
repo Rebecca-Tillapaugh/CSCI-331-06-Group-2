@@ -1,1 +1,4 @@
-# This file lists all dependencies/libraries used in our project.
+pandas==2.1.0
+matplotlib==3.8.0
+seaborn==0.12.2
+numpy==1.27.0
