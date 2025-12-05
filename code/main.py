@@ -1,54 +1,110 @@
 import os
 import time
 import csv
+import statistics
 import matplotlib.pyplot as plt
 from sudoku_board import SudokuBoard
 from Backtrack_Solver import backtrack_solve
-from CSP_solver import solve as csp_solve  
+from CSP_solver import solve as csp_solve
 
-"""
-Run all experiments across puzzle files and solver types
-@param puzzle_files: list of puzzle file names
-@param custom_flags: list of booleans, true if diagonal custom
-@return: results as a list of dicts
-"""
-def run_experiment(puzzle_files, custom_flags):
 
+puzzle_files_info = [
+    # (file_path, custom_flag, difficulty_label)
+    
+    # Easy (5 Puzzles)
+    ("puzzle_easy_1.txt", False, "Easy"),
+    ("puzzle_easy_2.txt", False, "Easy"),
+    ("puzzle_easy_3.txt", False, "Easy"),
+    ("puzzle_easy_4.txt", False, "Easy"),
+    ("puzzle_easy_5.txt", False, "Easy"),
+
+    # Standard Medium (5 Puzzles)
+    ("puzzle_std_med_1.txt", False, "Medium"),
+    ("puzzle_std_med_2.txt", False, "Medium"),
+    ("puzzle_std_med_3.txt", False, "Medium"),
+    ("puzzle_std_med_4.txt", False, "Medium"),
+    ("puzzle_std_med_5.txt", False, "Medium"),
+
+    # Standard Hard (10 Puzzles) 
+    ("puzzle_std_hard_1.txt", False, "Hard"),
+    ("puzzle_std_hard_2.txt", False, "Hard"),
+    ("puzzle_std_hard_3.txt", False, "Hard"),
+    ("puzzle_std_hard_4.txt", False, "Hard"),
+    ("puzzle_std_hard_5.txt", False, "Hard"),
+    ("puzzle_std_hard_6.txt", False, "Hard"),
+    ("puzzle_std_hard_7.txt", False, "Hard"),
+    ("puzzle_std_hard_8.txt", False, "Hard"),
+    ("puzzle_std_hard_9.txt", False, "Hard"),
+    ("puzzle_std_hard_10.txt", False, "Hard"),
+
+    # Custom Diagonal Medium (5 Puzzles)
+    ("puzzle_custom_med_1.txt", True, "Custom Medium"),
+    ("puzzle_custom_med_2.txt", True, "Custom Medium"),
+    ("puzzle_custom_med_3.txt", True, "Custom Medium"),
+    ("puzzle_custom_med_4.txt", True, "Custom Medium"),
+    ("puzzle_custom_med_5.txt", True, "Custom Medium"),
+
+    # Custom Diagonal Hard (10 Puzzles)
+    ("puzzle_custom_hard_1.txt", True, "Custom Hard"),
+    ("puzzle_custom_hard_2.txt", True, "Custom Hard"),
+    ("puzzle_custom_hard_3.txt", True, "Custom Hard"),
+    ("puzzle_custom_hard_4.txt", True, "Custom Hard"),
+    ("puzzle_custom_hard_5.txt", True, "Custom Hard"),
+    ("puzzle_custom_hard_6.txt", True, "Custom Hard"),
+    ("puzzle_custom_hard_7.txt", True, "Custom Hard"),
+    ("puzzle_custom_hard_8.txt", True, "Custom Hard"),
+    ("puzzle_custom_hard_9.txt", True, "Custom Hard"),
+    ("puzzle_custom_hard_10.txt", True, "Custom Hard"),
+]
+
+# Runs the experiment
+def run_experiment(puzzle_files_info):
     results = []
 
-    for file_path, custom in zip(puzzle_files, custom_flags):
-        board = SudokuBoard(file_path, custom=custom)
+    for file_path, custom, difficulty in puzzle_files_info:
+        dir_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        full_path = os.path.join(dir_path, "data", file_path)
+        board = SudokuBoard(full_path, custom=custom)
 
-        # Plain backtracking 
-        print(f"\nRunning Backtracking on {os.path.basename(file_path)} (custom={custom})")
-        start = time.perf_counter()
-        solved = backtrack_solve(board)
-        end = time.perf_counter()
+        # Plain Backtracking
+        print(f"\nRunning Backtracking on {file_path} (custom={custom})")
+        bt_metrics = backtrack_solve(board)
+
         results.append({
             "solver": "Backtracking",
-            "file": os.path.basename(file_path),
+            "file": file_path,
             "custom": custom,
-            "runtime": end - start,
-            "nodes": board.backtrack_calls if hasattr(board, 'backtrack_calls') else "N/A",
-            "constraint_checks": board.constraint_checks if hasattr(board, 'constraint_checks') else "N/A"
+            "difficulty": difficulty,
+            "runtime": bt_metrics["runtime"],
+            "assignments": bt_metrics.get("assignments", 0),
+            "backtracks": bt_metrics.get("backtracks", 0),
+            "constraint_checks": bt_metrics.get("constraint_checks", 0),
+            "consistency_time": bt_metrics.get("consistency_time", 0),
+            "copying_time": bt_metrics.get("copying_time", 0)
         })
 
         # Reset board for CSP
-        board = SudokuBoard(file_path, custom=custom)
+        board = SudokuBoard(full_path, custom=custom)
 
-        print(f"\nRunning CSP on {os.path.basename(file_path)} (custom={custom})")
-        start = time.perf_counter()
-        csp_metrics = csp_solve(board)  # csp_solve should return a dict: runtime, configsProcessed, consistency, copying
-        end = time.perf_counter()
+        # CSP
+        print(f"\nRunning CSP on {file_path} (custom={custom})")
+        csp_metrics = csp_solve(board)
+
+        configs_processed = csp_metrics.get("configsProcessed", 0)
+        configs_generated = csp_metrics.get("configsGenerated", 0)
+        csp_backtracks = configs_generated - configs_processed
+
         results.append({
             "solver": "CSP",
-            "file": os.path.basename(file_path),
+            "file": file_path,
             "custom": custom,
-            "runtime": end - start,
-            "nodes": csp_metrics.get("configsProcessed", "N/A"),
-            "constraint_checks": csp_metrics.get("constraint_checks", "N/A"),
-            "consistency_time": csp_metrics.get("consistency", "N/A"),
-            "copying_time": csp_metrics.get("copying", "N/A")
+            "difficulty": difficulty,
+            "runtime": csp_metrics["runtime"],
+            "assignments": configs_processed,
+            "backtracks": csp_backtracks,
+            "constraint_checks": csp_metrics.get("constraint_checks", 0),
+            "consistency_time": csp_metrics.get("consistency_time", 0),
+            "copying_time": csp_metrics.get("copying_time", 0)
         })
 
     return results
@@ -58,65 +114,112 @@ def save_results_csv(results, filename="experiment_results.csv"):
         print("No results to save.")
         return
 
-    # Get the union of all keys from all result dictionaries
     all_keys = set().union(*[r.keys() for r in results])
-
-    # Makes sure every dictionary has all keys
     for r in results:
         for k in all_keys:
             if k not in r:
-                r[k] = 0  # Fills missing metrics with 0
+                r[k] = 0
 
     with open(filename, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=all_keys)
         writer.writeheader()
         writer.writerows(results)
+    print(f"Results saved to {filename}")
 
+def aggregate_results_by_difficulty(results):
+    grouped_data = {}
+    for r in results:
+        key = (r['difficulty'], r['solver'])
+        if key not in grouped_data:
+            grouped_data[key] = {'runtime': [], 'assignments': [], 'backtracks': []}
+        grouped_data[key]['runtime'].append(r['runtime'])
+        grouped_data[key]['assignments'].append(r['assignments'])
+        grouped_data[key]['backtracks'].append(r['backtracks'])
 
-def plot_results(results):
-    # Separate solvers
-    backtrack_runtimes = [r["runtime"] for r in results if r["solver"] == "Backtracking"]
-    csp_runtimes = [r["runtime"] for r in results if r["solver"] == "CSP"]
+    aggregated = []
+    difficulty_order = ["Easy", "Medium", "Hard", "Evil"]
+    for difficulty in difficulty_order:
+        for solver in ["Backtracking", "CSP"]:
+            key = (difficulty, solver)
+            if key in grouped_data:
+                data = grouped_data[key]
+                if not data['runtime']:
+                    continue
+                aggregated.append({
+                    "difficulty": difficulty,
+                    "solver": solver,
+                    "avg_runtime": statistics.mean(data['runtime']),
+                    "avg_assignments": statistics.mean(data['assignments']),
+                    "avg_backtracks": statistics.mean(data['backtracks']),
+                })
+    return aggregated
 
-    backtrack_nodes = [r["nodes"] for r in results if r["solver"] == "Backtracking"]
-    csp_nodes = [r["nodes"] for r in results if r["solver"] == "CSP"]
+def plot_aggregate_results(aggregated_results, metric_key, title, ylabel, filename):
+    difficulty_order = ["Easy", "Medium", "Hard", "Evil"]
+    difficulties = [d for d in difficulty_order if d in [r['difficulty'] for r in aggregated_results]]
 
-    files = [r["file"] for r in results if r["solver"] == "Backtracking"]
+    bt_data = [r[metric_key] for d in difficulties for r in aggregated_results if r['difficulty'] == d and r['solver'] == 'Backtracking']
+    csp_data = [r[metric_key] for d in difficulties for r in aggregated_results if r['difficulty'] == d and r['solver'] == 'CSP']
 
-    # Figure 1: Runtime Comparison
-    plt.figure(figsize=(6, 4))
-    plt.bar(["Backtracking", "CSP"], [sum(backtrack_runtimes)/len(backtrack_runtimes),
-                                      sum(csp_runtimes)/len(csp_runtimes)], color=["orange", "green"])
-    plt.ylabel("Average Runtime (s)")
-    plt.title("Total Runtime Comparison")
-    plt.savefig("figure_runtime.png")
+    x = range(len(difficulties))
+    width = 0.35
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar([i - width/2 for i in x], bt_data, width, label='Backtracking', color='#1f77b4')
+    ax.bar([i + width/2 for i in x], csp_data, width, label='CSP (FC+MRV+LCV)', color='#ff7f0e')
+
+    ax.set_ylabel(ylabel)
+    ax.set_xlabel("Puzzle Difficulty")
+    ax.set_title(title)
+    ax.set_xticks(x)
+    ax.set_xticklabels(difficulties)
+
+    if 'backtracks' in metric_key or 'assignments' in metric_key:
+        ax.set_yscale('log')
+
+    ax.legend()
+    fig.tight_layout()
+    plt.savefig(filename)
     plt.show()
 
-    #Figure 2: Search Effort
-    plt.figure(figsize=(6, 4))
-    plt.bar(["Backtracking", "CSP"], [sum(backtrack_nodes)/len(backtrack_nodes),
-                                      sum(csp_nodes)/len(csp_nodes)], color=["orange", "green"])
-    plt.yscale("log")
-    plt.ylabel("Nodes Visited (log scale)")
-    plt.title("Search Effort Reduction")
-    plt.savefig("figure_nodes.png")
-    plt.show()
+def plot_aggregate_runtime(aggregated_results):
+    plot_aggregate_results(aggregated_results, 'avg_runtime',
+                           "Average Runtime by Difficulty", "Runtime (s)",
+                           "figure_aggregate_runtime.png")
 
-"""
-Currently just to test out Sudoku Board class. Might be used to run everything, and have the test functions in here
-"""
+def plot_aggregate_assignments(aggregated_results):
+    plot_aggregate_results(aggregated_results, 'avg_assignments',
+                           "Average Assignments (Search Space Size)", "Assignments (Log Scale)",
+                           "figure_aggregate_assignments.png")
+
+def plot_aggregate_backtracks(aggregated_results):
+    plot_aggregate_results(aggregated_results, 'avg_backtracks',
+                           "Average Backtracks (Pruning Success)", "Backtracks (Log Scale)",
+                           "figure_aggregate_backtracks.png")
+
+# Summary of stats
+def summary_statistics(results):
+    for solver in ["Backtracking", "CSP"]:
+        solver_results = [r for r in results if r["solver"] == solver]
+        runtimes = [r["runtime"] for r in solver_results]
+        assignments = [r["assignments"] for r in solver_results]
+        backtracks = [r["backtracks"] for r in solver_results]
+        print(f"\n{solver} Summary (Raw Data):")
+        print(f"Average runtime: {statistics.mean(runtimes):.4f}s, stdev: {statistics.stdev(runtimes) if len(runtimes) > 1 else 0:.4f}")
+        print(f"Average assignments: {statistics.mean(assignments):.2f}")
+        print(f"Average backtracks: {statistics.mean(backtracks):.2f}")
+
+
 def main():
-    dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    puzzle_files = [
-        os.path.join(dir, "data", "puzzle_standard_1.txt"),
-        os.path.join(dir, "data", "puzzle_hard.txt"),
-        os.path.join(dir, "data", "puzzle_custom_1.txt")
-    ]
-    custom_flags = [False, False, True]
-
-    results = run_experiment(puzzle_files, custom_flags)
+    results = run_experiment(puzzle_files_info)
     save_results_csv(results)
-    plot_results(results)
-    
+
+    aggregated_data = aggregate_results_by_difficulty(results)
+    plot_aggregate_runtime(aggregated_data)
+    plot_aggregate_assignments(aggregated_data)
+    plot_aggregate_backtracks(aggregated_data)
+
+    summary_statistics(results)
+
 if __name__ == "__main__":
     main()

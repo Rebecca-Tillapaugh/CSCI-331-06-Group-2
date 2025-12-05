@@ -1,7 +1,6 @@
 import os
 import time
 from collections import deque
-
 from sudoku_board import SudokuBoard
 
 ONE_TO_NINE = {1, 2, 3, 4, 5, 6, 7, 8, 9}
@@ -57,7 +56,9 @@ class CSPNode:
         :param restrictions: A collection of values to restrict
         :return: Whether the restrictions removed any values no previously restricted
         """
+        old_len = len(self.possibleValues)
         self.possibleValues.difference_update(restrictions)
+        return len(self.possibleValues) != old_len
 
     def copy(self):
         """
@@ -99,24 +100,24 @@ class CSPBoard:
         Get a list of all cells without an assigned value in the grid
         :return: A list of all unassigned cells in the grid
         """
-        unassignedNodes = []
+        nodes = []
         for row in self.grid:
             for cell in row:
                 if cell.assignedValue is None:
-                    unassignedNodes.append(cell)
-        return unassignedNodes
+                    nodes.append(cell)
+        return nodes
 
     def getUnassignedNodeNums(self):
         """
         Get a list of all cell numbers without an assigned value in the grid
         :return: A list of all unassigned cells in the grid
         """
-        unassignedNodes = []
+        nums = []
         for row in self.grid:
             for cell in row:
                 if cell.assignedValue is None:
-                    unassignedNodes.append(cell.cellNum)
-        return unassignedNodes
+                    nums.append(cell.cellNum)
+        return nums
 
     def isSolved(self):
         """
@@ -137,25 +138,25 @@ class CSPBoard:
 
                 # Same row
                 toAdd.update(range(rowI * self.size, (rowI + 1) * self.size))
+
                 # Same col
-                toAdd.update([(rowNum * self.size) + colI for rowNum in range(self.size)])
+                toAdd.update([(r * self.size) + colI for r in range(self.size)])
 
                 # Same box
-                start_row = (rowI // self.boxSize) * self.boxSize
-                start_col = (colI // self.boxSize) * self.boxSize
-                for i in range(start_row, start_row + self.boxSize):
-                    for j in range(start_col, start_col + self.boxSize):
+                start_r = (rowI // self.boxSize) * self.boxSize
+                start_c = (colI // self.boxSize) * self.boxSize
+                for i in range(start_r, start_r + self.boxSize):
+                    for j in range(start_c, start_c + self.boxSize):
                         toAdd.add(i * self.size + j)
 
                 # Same diagonal for custom puzzles
                 if self.custom:
                     if rowI == colI:
-                        # FIXED: main diagonal indices (i * size + i), not i ** 2
                         toAdd.update([i * self.size + i for i in range(self.size)])
                     if rowI + colI == self.size - 1:
-                        toAdd.update([(i * self.size) + self.size - 1 - i for i in range(self.size)])
+                        toAdd.update([(i * self.size) + (self.size - 1 - i) for i in range(self.size)])
 
-                toAdd.difference_update({node.cellNum})
+                toAdd.discard(node.cellNum)
                 self.neighborsOf[node.cellNum] = toAdd
 
     def copy(self):
@@ -163,89 +164,66 @@ class CSPBoard:
         Create a copy of this board, keeping neighbors and restrictions on possible values
         :return: The created copy
         """
-        # FIXED: copy neighborsOf so copies don't share the same dict reference
         copy = CSPBoard(self.size, self.boxSize, self.custom, self.neighborsOf.copy())
         for i, row in enumerate(self.grid):
             for j, node in enumerate(row):
                 copy.grid[i][j] = node.copy()
         return copy
 
-    def getConstraintsFrom(self, cell, val):
+    def getConstraintsFrom(self, cellNum, val):
         """
         Get the number of constraints which would be added if a node took on some val
         :param cell: The cellNumber of the node in question
         :param val: The value to take on
         :return: The number of constraints made if this node were to take this val
         """
-        return sum([1 if val in self.getCell(n).possibleValues else 0 for n in self.neighborsOf[cell]])
+        return sum([
+            1 if val in self.getCell(n).possibleValues else 0
+            for n in self.neighborsOf[cellNum]
+        ])
 
-    def makeMove(self, cellToChange: CSPNode, val: int):
+    def makeMove(self, node: CSPNode, val: int):
         """
         Create a copy of this board where one cell is assigned a certain value
         :param cellToChange: The cell to assign a value to
         :param val: The value to assign the cell
         :return: The board with the newly assigned value
         """
-        copyBoard = self.copy()
+        newBoard = self.copy()
+        r = node.cellNum // self.size
+        c = node.cellNum % self.size
+        newBoard.grid[r][c].assignValue(val)
+        return newBoard
 
-        rowI = cellToChange.cellNum // self.size
-        colI = cellToChange.cellNum % self.size
-        copyBoard.grid[rowI][colI].assignValue(val)
-
-        return copyBoard
-
-    def enforceConsistency(self) -> bool:
+    def enforceConsistency(self):
         """
-        An implementation of a forward-checking algorithm.
-        This restricts values from a node's possible values list based on its neighbors' values, or impossible
-        restrictions certain values would place on its neighbors' possible values.
+        An implementation of a Forward-Checking (FC) algorithm.
+        This restricts values from unassigned neighbors based on ALL currently assigned nodes.
         :return: Whether this configuration is satisfiable.
         """
-        stillToCheck = deque()
+        assigned_nodes = [
+            node for row in self.grid for node in row if node.assignedValue is not None
+        ]
 
-        stillToCheck.extend(self.getUnassignedNodeNums())
+        # for every assigned node, remove its value from its unassigned neighbors domains
+        for assigned_node in assigned_nodes:
+            val = assigned_node.assignedValue
+            
+            # Check all its neighbors
+            for neighNum in self.neighborsOf[assigned_node.cellNum]:
+                neighbor_node = self.getCell(neighNum)
 
-        inQueue = set(stillToCheck)
+                # Only restrict unassigned nodes
+                if neighbor_node.assignedValue is None:
+                    
+                    # If a restriction occurs 
+                    if neighbor_node.restrict(val):
 
-        while len(stillToCheck) > 0:
-            currentNum = stillToCheck.popleft()
-            inQueue.remove(currentNum)
-            current = self.getCell(currentNum)
+                        # Dead end here
+                        if neighbor_node.isDeadEnd():
+                            return False #Pruning it
 
-            # Add bad vals to this set for removal later so the set doesn't change while under iteration
-            invalidVals = set()
-            for value in current.possibleValues:
-                for neighborNum in self.neighborsOf[current.cellNum]:
-                    neighbor = self.getCell(neighborNum)
-                    if neighbor.hasFinalValue() and value in neighbor.possibleValues:
-                        # Assigning value to current would leave neighbor with no possible values
-                        invalidVals.add(value)
-                        break
-
-            revised = len(invalidVals) > 0
-            current.restrict(*invalidVals)
-
-            if revised:
-                if current.isDeadEnd():
-                    return False
-                if current.hasFinalValue():
-                    current.assignValue(next(iter(current.possibleValues)))
-                # Re-check all neighbors not already in the queue against this revised domain
-                recheck = set([n for n in self.neighborsOf[currentNum]
-                               if n not in inQueue and self.getCell(n).assignedValue is None])
-                stillToCheck.extend(recheck)
-                inQueue.update(recheck)
         return True
-
-    def __repr__(self):
-        result = ""
-        for i, row in enumerate(self.grid):
-            for j, node in enumerate(row):
-                result += str(node.assignedValue) if node.assignedValue is not None else '.'
-                result += " "
-                result += "| " if j == 2 or j == 5 else ""
-            result += "\n" + ("---------------------\n" if i == 2 or i == 5 else "")
-        return result
 
 
 def convertToCSP(baseBoard: SudokuBoard) -> CSPBoard:
@@ -257,16 +235,12 @@ def convertToCSP(baseBoard: SudokuBoard) -> CSPBoard:
     board = CSPBoard(baseBoard.size, baseBoard.box_size, baseBoard.custom)
     nodeId = 0
     for i, row in enumerate(baseBoard.grid):
-        for j, value in enumerate(row):
-            if value != 0:
-                node = CSPNode(nodeId, {value}, assignedValue=value)
-            else:
-                node = CSPNode(nodeId, ONE_TO_NINE.copy())
+        for j, val in enumerate(row):
+            domain = {val} if val != 0 else ONE_TO_NINE.copy()
+            node = CSPNode(nodeId, domain, assignedValue=val if val != 0 else None)
             board.grid[i][j] = node
             nodeId += 1
-
     board.assignNeighbors()
-
     return board
 
 
@@ -279,61 +253,60 @@ def solve(baseBoard: SudokuBoard):
     :return: dict of metrics
     """
 
-    consistency = copying = 0
-    configsGenerated = configsProcessed = 0
-    board = convertToCSP(baseBoard)
+    consistency_time = 0
+    copying_time = 0
+    configsGenerated = 0
+    configsProcessed = 0
 
-    configStack = [board]
+    board = convertToCSP(baseBoard)
+    stack = [board]
     solved = False
     finalBoard = None
 
-    while len(configStack) > 0 and not solved:
-        currentConfig = configStack.pop()
+    while stack and not solved:
+        current = stack.pop()
         configsProcessed += 1
 
-        start = time.perf_counter()
-        consistent = currentConfig.enforceConsistency()
-        consistency += time.perf_counter() - start
+        # Forward checking
+        t0 = time.perf_counter()
+        consistent = current.enforceConsistency()
+        consistency_time += time.perf_counter() - t0
 
-        if consistent:
-            solved = currentConfig.isSolved()
-            if solved:
-                finalBoard = currentConfig
-                break
-            else:
-                # Get the most restricted assignable vertex (MRV)
-                currentNode = min(currentConfig.getUnassignedNodes())
-                # LCV ordering
-                orderedMoves = sorted(
-                    currentNode.possibleValues,
-                    key=lambda x: currentConfig.getConstraintsFrom(currentNode.cellNum, x)
-                )
+        if not consistent:
+            continue
 
-                start = time.perf_counter()
-                for val in orderedMoves:
-                    configStack.append(currentConfig.makeMove(currentNode, val))
-                    configsGenerated += 1
-                copying += time.perf_counter() - start
+        if current.isSolved():
+            solved = True
+            finalBoard = current
+            break
 
-    # Print solution for verification
-    print(f"Solved\n{finalBoard}" if solved else "No Solution")
-    print(f"Configs Made: {configsGenerated}")
-    print(f"Configs Processed: {configsProcessed}")
-    print(consistency, copying, sep="\n")
+        # Pick MRV
+        node = min(current.getUnassignedNodes())
 
-    total_runtime = consistency + copying  #Approximates
+        # LCV ordering
+        ordered = sorted(
+            node.possibleValues,
+            key=lambda v: current.getConstraintsFrom(node.cellNum, v)
+        )
 
-    # Return metrics for experiment collection
+        # Generate child boards
+        t1 = time.perf_counter()
+        for v in ordered:
+            stack.append(current.makeMove(node, v))
+            configsGenerated += 1
+        copying_time += time.perf_counter() - t1
+
+    total_runtime = consistency_time + copying_time
+
     return {
         "solved": solved,
         "runtime": total_runtime,
         "configsProcessed": configsProcessed,
         "configsGenerated": configsGenerated,
-        "consistency": consistency,
-        "copying": copying,
+        "consistency_time": consistency_time,
+        "copying_time": copying_time,
         "finalBoard": finalBoard
     }
-
 
 if __name__ == "__main__":
     directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

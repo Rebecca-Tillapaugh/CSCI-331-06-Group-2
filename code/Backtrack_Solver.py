@@ -6,10 +6,14 @@ import os
 backtrack_calls = 0
 backtrack_count = 0
 
-# Performs backtracking to solve Soduku Board
-def backtrack(board: SudokuBoard) -> bool:
+# Additional metrics (to match CSP)
+assignment_count = 0
+constraint_checks = 0
 
-    global backtrack_calls, backtrack_count
+
+# Performs backtracking to solve Sudoku Board
+def backtrack(board: SudokuBoard) -> bool:
+    global backtrack_calls, backtrack_count, assignment_count, constraint_checks
     backtrack_calls += 1
 
     # Find next empty cell
@@ -19,10 +23,19 @@ def backtrack(board: SudokuBoard) -> bool:
     
     row, col = empty
     for num in range(1, 10):
+
+        # Track constraint checks (closest equivalent to CSP's consistency work)
+        constraint_checks += 1
+
         if board.is_valid_move(row, col, num):
+
+            # Count assignments (first time placing the value)
+            assignment_count += 1
+
             board.grid[row][col] = num
             if backtrack(board):
                 return True
+
             backtrack_count += 1
             board.grid[row][col] = 0
 
@@ -30,9 +43,12 @@ def backtrack(board: SudokuBoard) -> bool:
 
 
 def backtrack_solve(board: SudokuBoard):
-    global backtrack_calls, backtrack_count
+    global backtrack_calls, backtrack_count, assignment_count, constraint_checks
     backtrack_calls = 0
     backtrack_count = 0
+    assignment_count = 0
+    constraint_checks = 0
+
     start_time = time.time()
 
     solved = backtrack(board)
@@ -44,6 +60,8 @@ def backtrack_solve(board: SudokuBoard):
     print(f"Runtime: {total_time:.4f} seconds")
     print(f"Backtrack calls: {backtrack_calls}")
     print(f"Backtracks made: {backtrack_count}")
+    print(f"Assignments: {assignment_count}")
+    print(f"Constraint checks: {constraint_checks}")
 
     if solved:
         print("\nSudoku solved using Backtracking.")
@@ -57,8 +75,10 @@ def backtrack_solve(board: SudokuBoard):
         "runtime": total_time,
         "backtrack_calls": backtrack_calls,
         "backtracks": backtrack_count,
-        "consistency_time": 0,   # dummy since backtracking has no forward checking (needed for the script to work)
-        "copying_time": 0,       # dummy since backtracking has no state copying (needed for the script to work)
+        "assignments": assignment_count,      # NEW
+        "constraint_checks": constraint_checks,  # NEW
+        "consistency_time": 0,   # dummy since backtracking has no forward checking
+        "copying_time": 0,       # dummy since backtracking has no state copying
         "finalBoard": board
     }
 
